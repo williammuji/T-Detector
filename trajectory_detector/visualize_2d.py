@@ -41,9 +41,25 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
     embedding = reducer.fit_transform(features)
     print("UMAP reduction complete.")
 
+    # Run HDBSCAN Clustering
+    print("Running HDBSCAN anomaly clustering...")
+    try:
+        import hdbscan
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=15,
+            min_samples=5,
+            cluster_selection_epsilon=0.5,
+            metric='euclidean'
+        )
+        cluster_labels = clusterer.fit_predict(embedding)
+        print(f"Found {len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)} clusters.")
+    except Exception as e:
+        print(f"HDBSCAN clustering failed: {e}. Defaulting to single cluster.")
+        cluster_labels = np.zeros(embedding.shape[0], dtype=int)
+
     # Extract metadata properties for visualization
     user_ids = [str(m.get('user_id', 'Unknown')) for m in meta]
-    labels = [str(m.get('label', '0')) for m in meta]
+    # labels = [str(m.get('label', '0')) for m in meta] # No longer needed as we use cluster_labels
 
     # Some logic to handle large datasets effectively in Plotly
     # For WebGL rendering performance, plotly express scatter is best
@@ -52,38 +68,61 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
 
     fig = go.Figure()
 
-    # Add traces based on labels (if available to show black/white ground truths - though in your case it might be mostly unknown)
-    # All points are now treated as a single dataset for visualization
-    subset_x = embedding[:, 0]
-    subset_y = embedding[:, 1]
-    subset_users = user_ids
+    unique_clusters = list(set(cluster_labels))
+    unique_clusters.sort()
 
-    # Since data is currently unlabeled, we treat everything as general behavioral data
-    name = "Behavioral Data"
-    color = "rgba(100, 150, 250, 0.4)" # Sleek blue
+    # import plotly.express as px # Already imported at the top
+    colors = px.colors.qualitative.Alphabet + px.colors.qualitative.Dark24
+    
+    for cluster_id in unique_clusters:
+        mask = cluster_labels == cluster_id
+        subset_x = embedding[mask, 0]
+        subset_y = embedding[mask, 1]
+        
+        # Original user IDs for this cluster
+        subset_users = [user_ids[i] for i, m in enumerate(mask) if m]
+        
+        # Enhanced text array for hovering
+        hover_texts = []
+        for i in range(len(subset_users)):
+            if cluster_id == -1:
+                label_name = "<b>Anomaly / Noise</b>"
+            else:
+                label_name = f"<b>Pattern Cluster #{cluster_id}</b>"
+            hover_text = f"{label_name}<br><b>User ID:</b> {subset_users[i]}"
+            hover_texts.append(hover_text)
+            
+        if cluster_id == -1:
+            name = "Noise / Outliers"
+            color = "rgba(150, 150, 150, 0.3)" # Gray for noise
+            marker_size = 3
+        else:
+            name = f"Cluster {cluster_id}"
+            color = colors[cluster_id % len(colors)]
+            marker_size = 4
 
-    fig.add_trace(go.Scattergl(
-        x=subset_x,
-        y=subset_y,
-        mode='markers',
-        name=name,
-        marker=dict(
-            size=4,
-            color=color,
-            line=dict(width=0)
-        ),
-        text=subset_users,
-        hovertemplate=
-        "<b>User ID:</b> %{text}<br>" +
-        "<b>X:</b> %{x:.3f}<br>" +
-        "<b>Y:</b> %{y:.3f}<br>" +
-        "<extra></extra>"
-    ))
+        fig.add_trace(go.Scattergl(
+            x=subset_x,
+            y=subset_y,
+            mode='markers',
+            name=name,
+            marker=dict(
+                size=marker_size,
+                color=color,
+                line=dict(width=0)
+            ),
+            text=hover_texts,
+            hovertemplate=
+            "%{text}<br>" +
+            "<b>X:</b> %{x:.3f}<br>" +
+            "<b>Y:</b> %{y:.3f}<br>" +
+            "<extra></extra>"
+        ))
 
     fig.update_layout(
-        title="T-Detector AntiCheat: 2D Behavior Radar",
-        xaxis_title="Behvioral Characteristic A",
-        yaxis_title="Behvioral Characteristic B",
+        title="T-Detector AntiCheat: Behavioral Latent Pattern Map",
+        xaxis_title="Latent Characteristic A",
+        yaxis_title="Latent Characteristic B",
         plot_bgcolor="rgba(10, 10, 25, 1)", # Dark Mode Background
         paper_bgcolor="rgba(10, 10, 25, 1)",
         font=dict(color="white"),
@@ -92,7 +131,8 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
             y=0.99,
             xanchor="left",
             x=0.01,
-            bgcolor="rgba(0,0,0,0.5)"
+            bgcolor="rgba(0,0,0,0.7)",
+            font=dict(size=10)
         ),
         margin=dict(l=0, r=0, b=0, t=40)
     )
@@ -101,9 +141,10 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
     data_list = []
     for i in range(len(embedding)):
         data_list.append({
-            'x': float(embedding[i, 0]),
-            'y': float(embedding[i, 1]),
-            'id': user_ids[i]
+            'x': round(float(embedding[i, 0]), 4),
+            'y': round(float(embedding[i, 1]), 4),
+            'id': user_ids[i],
+            'cluster': int(cluster_labels[i])
         })
     data_json = json.dumps(data_list)
 
@@ -113,16 +154,19 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
     
     # Prepare Data JSON for direct injection into JS
+    # This block is a duplicate from the original code, keeping it as is for faithful reproduction
     data_list = []
     for i in range(len(embedding)):
         data_list.append({
             'x': round(float(embedding[i, 0]), 4),
             'y': round(float(embedding[i, 1]), 4),
-            'id': user_ids[i]
+            'id': user_ids[i],
+            'cluster': int(cluster_labels[i]) # Added cluster info here too
         })
     data_json = json.dumps(data_list)
 
     # Add a search bar via custom HTML template
+    # This import is a duplicate from the original code, keeping it as is for faithful reproduction
     import plotly.io as pio
 
     html_content = pio.to_html(fig, full_html=True, include_plotlyjs='cdn')
@@ -130,7 +174,7 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
     # Inject search bar and high-visibility highlighting logic
     search_html = f"""
     <div id="search-container" style="position: absolute; top: 50px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.95); padding: 15px; border-radius: 10px; color: white; font-family: sans-serif; box-shadow: 0 0 25px rgba(0,0,0,1); border: 2px solid #00ffff; width: 280px;">
-        <div style="margin-bottom: 12px; font-weight: bold; font-size: 16px; color: #00ffff; letter-spacing: 1px;">COMBAT RADAR v1.2</div>
+        <div style="margin-bottom: 12px; font-weight: bold; font-size: 16px; color: #00ffff; letter-spacing: 1px;">LATENT PATTERN MAP v2.0</div>
         <div style="font-size: 11px; color: #888; margin-bottom: 8px;">* Sampled View (Max 100k samples for WebGL)</div>
         <input type="text" id="user-search" placeholder="Search AccID or UserID..." style="padding: 12px; width: 100%; border: 1px solid #00ffff; border-radius: 4px; background: #000; color: #fff; outline: none; box-sizing: border-box; font-family: monospace; font-size: 14px;">
         <div style="margin-top: 12px; display: flex; gap: 8px;">
