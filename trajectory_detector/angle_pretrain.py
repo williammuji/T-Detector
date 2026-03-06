@@ -20,16 +20,18 @@ import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
+from torch.optim import AdamW
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig, BertPreTrainedModel, get_linear_schedule_with_warmup
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -130,7 +132,7 @@ else:
     model_dir = data_dir.strip("/").split("/")[-1]+"_w2v/"
     vocab_name = "w2v/vocab%s.pk"%(suffix)
     if not os.path.exists(os.path.join(data_dir,vocab_name)):
-        os.makedirs(os.path.join(data_dir,"w2v"),exists_ok=True)
+        os.makedirs(os.path.join(data_dir,"w2v"),exist_ok=True)
         token_lists = [location_tokens,mouse_tokens]
     else:
         token_lists = [0,0]
@@ -153,7 +155,7 @@ else:
         if not use_cluster:
             wv_embedding=np.zeros((len(vocab2idxs[i])+1,100))
         else:
-            wv_embedding=np.zeros((np.unique(list(token_trans[i].values())).shape[0]+1,100))        
+            wv_embedding=np.zeros((np.unique(list(token_trans[i].values())).shape[0]+1,100))
         for v in vocabs[i]:
             if not use_cluster:
                 wv_embedding[vocab2idxs[i][v]]=wv_model.wv[str(v)]
@@ -168,7 +170,7 @@ else:
 if args.use_time_dis:
     file_name = "masked_action_sequence_with_feature(time-dis).pickle"
 else:
-    file_name = "masked_action_sequence_with_feature.pickle"   
+    file_name = "masked_action_sequence_with_feature.pickle"
 print("loading feature...")
 tmp = pickle.load(open(os.path.join(data_dir,file_name+suffix),"rb"))
 if len(tmp)==3:
@@ -188,7 +190,7 @@ from dataset import *
 # file_name = "train_test_idx_half.pk"
 file_name = "train_test_idx_80.pk"
 if not os.path.exists(os.path.join(data_dir,file_name)):
-    train_test_idx=[(np.random.random(len(e))>=0.2).astype(np.int) for e in day2action]
+    train_test_idx=[(np.random.random(len(e))>=0.2).astype(int) for e in day2action]
     pickle.dump(train_test_idx,open(os.path.join(data_dir,file_name),"wb"))
 else:
     print("loading...")

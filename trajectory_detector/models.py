@@ -8,22 +8,24 @@ import sys
 import logging
 import pickle
 import re
-from tqdm import tqdm_notebook as tqdm
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+import torch.nn as nn
+from transformers import BertConfig, BertPreTrainedModel
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -695,7 +697,7 @@ def masked_softmax(X,valid_len):
         mask=(torch.arange(0,X.shape[-1]).repeat(X.shape[0],1).to(X.device)<valid_len.view(-1,1).repeat(1,X.shape[-1])).float()
         mask=torch.log(mask)
         X=X+mask
-        
+
         return F.softmax(X,dim=-1).view(shape)
 class LayerNorm(nn.Module):
     def __init__(self,features,eps=1e-6):
@@ -738,7 +740,7 @@ class MLPAttention(nn.Module):
                               ,nn.Tanh())
         self.W_q=nn.Sequential(nn.Linear(query_size,units,bias=False)
                               ,nn.Tanh())
-        
+
         self.v=nn.Linear(units,1,bias=False)
         self.dropout=nn.Dropout(dropout)
     def forward(self,query,key,value,valid_len):
@@ -754,7 +756,7 @@ class MLPAttention_weight(nn.Module):
                               ,nn.Tanh())
         self.W_q=nn.Sequential(nn.Linear(query_size,units,bias=False)
                               ,nn.Tanh())
-        
+
         self.v=nn.Linear(units,1,bias=False)
         self.dropout=nn.Dropout(dropout)
     def forward(self,query,key,value,valid_len):
@@ -763,13 +765,13 @@ class MLPAttention_weight(nn.Module):
         scores=self.v(features).squeeze(-1)
         attention_weights=self.dropout(masked_softmax(scores,valid_len))
         return attention_weights
-    
+
 class AddictiveAttention(nn.Module):
     def __init__(self,key_size,dropout=0):
         super(AddictiveAttention,self).__init__()
         self.W_k=nn.Sequential(nn.Linear(key_size,1,bias=False)
                               ,nn.Tanh())
-        
+
 #         self.v=nn.Linear(units,1,bias=False)
         self.dropout=nn.Dropout(dropout)
     def forward(self,key,value,valid_len=None):
@@ -791,7 +793,7 @@ class R_Attention(nn.Module):
             inputs=self.attention(h.unsqueeze(1),sequence,sequence,valid_len).squeeze(1)
             h=self.rnn(inputs,h)
         return h
-    
+
 class DotProductAttention(nn.Module):
     def __init__(self,dropout=0):
         super(DotProductAttention,self).__init__()
@@ -828,7 +830,7 @@ class DotProductAttention_weight(nn.Module):
         scores=torch.bmm(query,key.permute(0,2,1))/math.sqrt(d)
         attention_weights=self.dropout(masked_softmax(scores,valid_len))
         return attention_weights
-    
+
 class AttentionSequencePoolingLayer(nn.Module):
     """The Attentional sequence pooling operation used in DIN & DIEN.
         Arguments
@@ -1014,7 +1016,7 @@ class AUGRUCell(nn.Module):
         reset_gate = torch.sigmoid(i_r + h_r)
         update_gate = torch.sigmoid(i_z + h_z)
         new_state = torch.tanh(i_n + reset_gate * h_n)
-    
+
         att_score = att_score.view(-1, 1)
         update_gate = att_score * update_gate
         hy = (1. - update_gate) * hx + update_gate * new_state
@@ -1058,7 +1060,7 @@ class DynamicGRU(nn.Module):
         return PackedSequence(outputs, batch_sizes, sorted_indices, unsorted_indices)
 class AUGRU_composition(nn.Module):
     #attention 得替换 mlp还是好一些
-    #AUGRU/AIGRU/AGRU  
+    #AUGRU/AIGRU/AGRU
     def __init__(self,input_size,hidden_size,query_size,attention_type='dot',**kwargs):
         super(AUGRU_composition,self).__init__(**kwargs)
         self.net=DynamicGRU(input_size,hidden_size,gru_type='AUGRU')
@@ -1225,7 +1227,7 @@ class Transformer_Encoder(nn.Module):
             extended_attention_mask = extended_attention_mask * self_mask.unsqueeze(0).unsqueeze(0)
 
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         #make head mask
         head_mask = [None] * self.config.num_hidden_layers
         outputs=self.Encoder(  embedding_output,
@@ -1325,13 +1327,13 @@ class GRU_module_AUGRU(nn.Module):
 #         Y_fre_hidden=torch.cat([F.adaptive_avg_pool1d(Y_fre.permute(0,2,1),1).squeeze(-1),\
 #                                 F.adaptive_max_pool1d(Y_fre.permute(0,2,1),1).squeeze(-1)],dim=1)
 #         Y_fre=self.ln_fre(Y_fre)
-    
+
         Y_fre=F.adaptive_avg_pool1d(self.cnn_fre(X_fre.permute(0,2,1)),1).permute(0,2,1) #CNN
         Y_fre_hidden=Y_fre[:,-1]
 
 #         Y_fre_output=self.rnn_fre_att(Y_fre,N=1)
-        
-#频域encoder的三种选择 GRU/TCN/Conv-LSTM 
+
+#频域encoder的三种选择 GRU/TCN/Conv-LSTM
 
 #         att_scores=self.attunit(Y_fre_hidden.unsqueeze(dim=1),X,X,None).squeeze(dim=1)
 #         X*=att_scores.unsqueeze(dim=-1)
@@ -1340,13 +1342,13 @@ class GRU_module_AUGRU(nn.Module):
 #         Y_fre_hidden=self.fre_trans(X_fre.view(X_fre.shape[0],-1))
 
         Y_time=self.rnn(X,Y_fre_hidden)
-    
+
         Y_time=self.ln_rnn(Y_time)
 #         Y_time_output=self.rnn_att(Y_time,N=3)
 
-#时域encoder的三种选择 GRU/TCN/Conv-LSTM 
+#时域encoder的三种选择 GRU/TCN/Conv-LSTM
 
-        
+
         if self.rnn_fre.bidirectional:   #这个地方可以考虑把首尾的一半concat起来，就不要那个妹有时间的部分
             inputs=torch.cat([Y_time[:,-1,:],Y_fre[:,-0,:],Y_fre[:,-1,:]],dim=-1)  #前后cat
         else:
@@ -1378,13 +1380,13 @@ class GRU_module_AUGRU(nn.Module):
 #                                 F.adaptive_max_pool1d(Y_fre.permute(0,2,1),1).squeeze(-1)],dim=1)
 #         Y_fre_hidden=self.fre_att(Y_fre,Y_fre).sum(dim=1)
 #         Y_fre=self.ln_fre(Y_fre)
-    
+
         Y_fre=F.adaptive_avg_pool1d(self.cnn_fre(X_fre.permute(0,2,1)),1).permute(0,2,1) #CNN
         Y_fre_hidden=Y_fre[:,-1]
 
 #         Y_fre_output=self.rnn_fre_att(Y_fre,N=1)
-        
-#频域encoder的三种选择 GRU/TCN/Conv-LSTM 
+
+#频域encoder的三种选择 GRU/TCN/Conv-LSTM
 
 #         att_scores=self.attunit(Y_fre_hidden.unsqueeze(dim=1),X,X,None).squeeze(dim=1)
 #         X*=att_scores.unsqueeze(dim=-1)
@@ -1392,13 +1394,13 @@ class GRU_module_AUGRU(nn.Module):
 
 #         Y_fre_hidden=self.fre_trans(X_fre.view(X_fre.shape[0],-1))
         Y_time=self.rnn(X,Y_fre_hidden)
-    
+
         Y_time=self.ln_rnn(Y_time)
 #         Y_time_output=self.rnn_att(Y_time,N=3)
 
-#时域encoder的三种选择 GRU/TCN/Conv-LSTM 
+#时域encoder的三种选择 GRU/TCN/Conv-LSTM
 
-        
+
         if self.rnn_fre.bidirectional:   #这个地方可以考虑把首尾的一半concat起来，就不要那个妹有时间的部分
             inputs=torch.cat([Y_time[:,-1,:],Y_fre[:,-0,:],Y_fre[:,-1,:]],dim=-1)  #前后cat
         else:
@@ -1473,7 +1475,7 @@ class Seis_transformer(nn.Module):
         self.rnn_time=nn.GRU(input_size=config_time.hidden_size,hidden_size=config_time.hidden_size,batch_first=True,bidirectional=False)
         self.rnn_time_att=R_Attention(config_time.hidden_size,config_time.hidden_size)
         #TemporalConvNet(3,[16,32,32])
-        
+
         self.Encoder_fre=BertEncoder(config=config_fre)
 #         self.Encoder_fre=BertAttention(config=config)
 
@@ -1490,8 +1492,8 @@ class Seis_transformer(nn.Module):
             self._init_weights(e)
         for n,e in self.P_time.named_modules():
             self._init_weights(e)
-        
-        
+
+
 #         self.rnns=nn.ModuleList()
 #         self.device=device
 #         for i in range(1):
@@ -1532,7 +1534,7 @@ class Seis_transformer(nn.Module):
     def forward(self,X,X_fre,encoder_hidden_states=None,encoder_extended_attention_mask=None,**kwargs):
 #         X=X.long()
 #         x,y,z,a=self.time_embedding_x(X[:,:,0]),self.time_embedding_y(X[:,:,1]),self.time_embedding_z(X[:,:,2]),\
-#                 self.time_embedding_z(X[:,:,3]) 
+#                 self.time_embedding_z(X[:,:,3])
 #         X=torch.cat([x,y,z],dim=-1)   #embedding
         X_time=X
         X_time=self.cnn_time(X_time.permute(0,2,1)).permute(0,2,1)   #CNN
@@ -1551,7 +1553,7 @@ class Seis_transformer(nn.Module):
             extended_attention_mask = attention_mask[:, None, None, :]
             extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         #make head mask
         head_mask = [None] * self.config_time.num_hidden_layers
         outputs=self.Encoder_time(  embedding_output,
@@ -1561,8 +1563,8 @@ class Seis_transformer(nn.Module):
                 encoder_attention_mask=encoder_extended_attention_mask)
         X_time=outputs[0]
         time_output=self.rnn_time_att(X_time)
-    
-    
+
+
 #         X=X_fre
         X_fre=self.cnn_fre(X_fre.permute(0,2,1)).permute(0,2,1)   #CNN
 
@@ -1581,7 +1583,7 @@ class Seis_transformer(nn.Module):
             extended_attention_mask = attention_mask[:, None, None, :]
             extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         #make head mask
         head_mask = [None] * self.config_fre.num_hidden_layers
         outputs_fre=self.Encoder_fre(  embedding_output,
@@ -1618,11 +1620,11 @@ class Seis_transformer(nn.Module):
         if self.model_type=='regression':
             return self.decoder(hidden).squeeze(-1),new_X_time,new_X_fre,reg_output
         else:
-            return self.decoder(hidden),new_X_time,new_X_fre,self.reg_decoder(hidden).squeeze(-1)          
+            return self.decoder(hidden),new_X_time,new_X_fre,self.reg_decoder(hidden).squeeze(-1)
     def get_hidden(self,X,X_fre,encoder_hidden_states=None,encoder_extended_attention_mask=None,**kwargs):
 #         X=X.long()
 #         x,y,z,a=self.time_embedding_x(X[:,:,0]),self.time_embedding_y(X[:,:,1]),self.time_embedding_z(X[:,:,2]),\
-#                 self.time_embedding_z(X[:,:,3]) 
+#                 self.time_embedding_z(X[:,:,3])
 #         X=torch.cat([x,y,z],dim=-1)   #embedding
         X_time=X
         X_time=self.cnn_time(X_time.permute(0,2,1)).permute(0,2,1)   #CNN
@@ -1641,7 +1643,7 @@ class Seis_transformer(nn.Module):
             extended_attention_mask = attention_mask[:, None, None, :]
             extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         #make head mask
         head_mask = [None] * self.config_time.num_hidden_layers
         outputs=self.Encoder_time(  embedding_output,
@@ -1651,8 +1653,8 @@ class Seis_transformer(nn.Module):
                 encoder_attention_mask=encoder_extended_attention_mask)
         X_time=outputs[0]
         time_output=self.rnn_time_att(X_time)
-    
-    
+
+
 #         X=X_fre
         X_fre=self.cnn_fre(X_fre.permute(0,2,1)).permute(0,2,1)   #CNN
 
@@ -1671,7 +1673,7 @@ class Seis_transformer(nn.Module):
             extended_attention_mask = attention_mask[:, None, None, :]
             extended_attention_mask = extended_attention_mask.to(dtype=next(self.parameters()).dtype)  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
-        
+
         #make head mask
         head_mask = [None] * self.config_fre.num_hidden_layers
         outputs_fre=self.Encoder_fre(  embedding_output,
@@ -1814,7 +1816,7 @@ class Residual_Attention(nn.Module):
         super(Residual_Attention,self).__init__()
         self.W_k=nn.Sequential(nn.Linear(key_size*2,1,bias=False)
                               ,nn.Tanh())
-        
+
 #         self.v=nn.Linear(units,1,bias=False)
         self.dropout=nn.Dropout(dropout)
     def forward(self,sequence,valid_len=None):
@@ -1832,14 +1834,14 @@ class Residual_Attention(nn.Module):
         scores=key.squeeze(-1)
         attention_weights=self.dropout(masked_softmax(scores,valid_len)).unsqueeze(-1)
 #         print(attention_weights)
-        return (attention_weights*value).sum(dim=1)    
+        return (attention_weights*value).sum(dim=1)
 class Mutual_Attention(nn.Module):
     def __init__(self,embedding_dim,hidden_size,dropout=0):
         super(Mutual_Attention, self).__init__()
         self.embedding_dim=embedding_dim
         self.hidden_size = hidden_size
         self.dropout = dropout
-        
+
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
 
@@ -1855,11 +1857,11 @@ class Mutual_Attention(nn.Module):
         self._composition_h = Seq2SeqEncoder(nn.LSTM,
                                            self.hidden_size+self.embedding_dim,
                                            self.hidden_size,
-                                           bidirectional=True) 
+                                           bidirectional=True)
         self._composition_p = Seq2SeqEncoder(nn.LSTM,
                                            self.hidden_size+self.embedding_dim,
                                            self.hidden_size,
-                                           bidirectional=True) 
+                                           bidirectional=True)
         # 也许可以分成两个
 
     def make_mask(self,X,valid_len):
@@ -1938,7 +1940,7 @@ class EmbeddingLayer(nn.Module):
                 assert embedding_weight.shape[1] == input_size
             else:
                 self.embedding = nn.Embedding(num_embeddings,input_size,padding_idx = 0)
-        
+
 
         if self.use_idx_embedding:
             if idx_embedding_weight is not None:
@@ -1946,7 +1948,7 @@ class EmbeddingLayer(nn.Module):
                                              _weight=idx_embedding_weight[i]) for i in range(3)])
             else:
                 self.idx_embedding = nn.ModuleList([nn.Emebedding(500,input_size) for i in range(3)])
-        
+
         if self.use_geo_position:
             config = BertConfig(hidden_size=input_size,max_position_embeddings=1000)
             self.geo_embedding = XY_Encoding(config, sinusoidal=sinusoidal,use_layernorm = use_layernorm)
@@ -1984,8 +1986,8 @@ class MLPModel(nn.Module):
         inputs = self.pool(X_embed.permute(0,2,1)).squeeze(-1)
         logits = self.dense(inputs)
         loss_func = nn.CrossEntropyLoss()
-        loss = loss_func(logits,labels)      
-        return logits,loss,inputs,X_embed,X_embed 
+        loss = loss_func(logits,labels)
+        return logits,loss,inputs,X_embed,X_embed
 class CNNModel(nn.Module):
     def __init__(self,input_size,input_size_fre,hidden_size,dropout_rate,bidirectional = False,\
                 use_phase = False,use_rnn = True,num_hidden_layers=1,num_attention_heads=4,use_fre=True,
@@ -2003,7 +2005,7 @@ class CNNModel(nn.Module):
         self.cnn = nn.Sequential()
         for i in range(num_cnn_layers):
                 self.cnn.add_module(str(i),nn.Sequential(nn.Conv1d(input_size,hidden_size,3,padding=1,stride = 2),
-                              nn.BatchNorm1d(hidden_size))) 
+                              nn.BatchNorm1d(hidden_size)))
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.dense = nn.Sequential(nn.Linear(hidden_size,hidden_size//2),nn.ReLU(),nn.Linear(hidden_size//2,2))
     def forward(self,X,X_fre,valid_len,time_dis,labels,time_position_ids = None,idx_list = None,geo_position_ids = None):
@@ -2011,8 +2013,8 @@ class CNNModel(nn.Module):
         inputs = self.pool(self.cnn(X_embed.permute(0,2,1))).squeeze(-1)
         logits = self.dense(inputs)
         loss_func = nn.CrossEntropyLoss()
-        loss = loss_func(logits,labels)      
-        return logits,loss,inputs,X_embed,X_embed 
+        loss = loss_func(logits,labels)
+        return logits,loss,inputs,X_embed,X_embed
 class BiGRUModel(nn.Module):
     def __init__(self,input_size,input_size_fre,hidden_size,dropout_rate,bidirectional = False,\
                 use_phase = False,use_rnn = True,num_hidden_layers=1,num_attention_heads=4,use_fre=True,
@@ -2038,8 +2040,8 @@ class BiGRUModel(nn.Module):
         inputs = self.pool(self.rnn(X_embed)[0].permute(0,2,1)).squeeze(-1)
         logits = self.dense(inputs)
         loss_func = nn.CrossEntropyLoss()
-        loss = loss_func(logits,labels)      
-        return logits,loss,inputs,X_embed,X_embed 
+        loss = loss_func(logits,labels)
+        return logits,loss,inputs,X_embed,X_embed
 class ConvGRU_Encoder(nn.Module):
     def __init__(self,input_size,input_size_fre,hidden_size,dropout_rate,bidirectional = False,\
                 use_phase = False,use_rnn = True,num_hidden_layers=1,num_attention_heads=4,use_fre=True,
@@ -2052,18 +2054,18 @@ class ConvGRU_Encoder(nn.Module):
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
             self.dense_dropout = nn.Dropout(self.dropout)
-            
+
         self.use_embedding = use_embedding
         self.use_geo_position = use_geo_position
         self.use_idx_embedding = use_idx_embedding
-        
+
         self.use_time_position = use_time_position
         self.pre_cnn_time_position = pre_cnn_time_position
 
         self.use_cnn = use_cnn
         self.use_rnn = use_rnn
         self.use_fre = use_fre
-        
+
         if self.use_embedding:
             if embedding_weight is not None:
                 self.embedding = nn.Embedding(embedding_weight.shape[0],embedding_weight.shape[1],padding_idx = 0,\
@@ -2071,7 +2073,7 @@ class ConvGRU_Encoder(nn.Module):
                 assert embedding_weight.shape[1] == input_size
             else:
                 self.embedding = nn.Embedding(num_embeddings,input_size,padding_idx = 0)
-        
+
 
         if self.use_idx_embedding:
             if idx_embedding_weight is not None:
@@ -2079,13 +2081,13 @@ class ConvGRU_Encoder(nn.Module):
                                              _weight=idx_embedding_weight[i]) for i in range(3)])
             else:
                 self.idx_embedding = nn.ModuleList([nn.Emebedding(500,input_size) for i in range(3)])
-        
+
         if self.use_geo_position:
             config = BertConfig(hidden_size=input_size,max_position_embeddings=1000)
             self.geo_embedding = XY_Encoding(config, sinusoidal=sinusoidal)
-                
 
-        self.num_cnn_layers = num_cnn_layers 
+
+        self.num_cnn_layers = num_cnn_layers
         self.pool = pool
         if self.use_cnn:
             self.cnn = nn.Sequential()
@@ -2097,7 +2099,7 @@ class ConvGRU_Encoder(nn.Module):
                                   nn.MaxPool1d(2,padding=0,return_indices=True)))
                 else:
                     self.cnn.add_module(str(i),nn.Sequential(nn.Conv1d(input_size,hidden_size,3,padding=1,stride = 2),
-                                  nn.BatchNorm1d(hidden_size)))                    
+                                  nn.BatchNorm1d(hidden_size)))
 
         if self.use_rnn:
             if self.use_cnn:
@@ -2108,8 +2110,8 @@ class ConvGRU_Encoder(nn.Module):
                               num_layers = num_hidden_layers,batch_first = True,bidirectional = bidirectional)
         else:
             self.rnn = Transformer_Encoder(tmp_input_size,num_hidden_layers,num_attention_heads)
-            
-            
+
+
 
         if use_phase:
             input_size_fre *= 2
@@ -2129,7 +2131,7 @@ class ConvGRU_Encoder(nn.Module):
 
         self.hidden_size_time = hidden_size*(2 if self.use_rnn and self.rnn.bidirectional else 1)
         self.hidden_size_fre = hidden_size*(2 if 'rnn_fre' in self.__dict__['_modules'] and self.rnn_fre.bidirectional else 1)
-        
+
         output_size_time = self.hidden_size_time*(2 if self.use_rnn and self.rnn.bidirectional else 1)
         output_size_fre = self.hidden_size_fre*(2 if 'rnn_fre' in self.__dict__['_modules'] and self.rnn_fre.bidirectional else 1)
 
@@ -2194,10 +2196,10 @@ class ConvGRU_Encoder(nn.Module):
 #             self.rnn.flatten_parameters()
             Y_time,_ = self.rnn(inputs,initial_state)
             Y_time,d = nn.utils.rnn.pad_packed_sequence(Y_time,batch_first=True,total_length = X.shape[1])
-            
+
 
             _ = _.view(self.rnn.num_layers,1+(int)(self.rnn.bidirectional),Y_time.shape[0],self.rnn.hidden_size)
-            
+
             Y_time = self.ln_rnn(Y_time)
             Y_time_end = torch.gather(Y_time,dim=1,index=(valid_len-1).unsqueeze(1).repeat(1,self.hidden_size_time).unsqueeze(1))[:,0]
 
@@ -2205,10 +2207,10 @@ class ConvGRU_Encoder(nn.Module):
                 Y_time_hidden = torch.cat([Y_time[:,0],Y_time_end],dim=-1)
             else:
                 Y_time_hidden = Y_time_end
-            
+
             sequence_logits = Y_time
             final_state = _
-            
+
         else:
             # decode 的mask已经写好了，缺的是把query的inital state传进去，这一部分忘记怎么处理了
             position_encode = 1 - self.pre_cnn_time_position
@@ -2223,7 +2225,7 @@ class ConvGRU_Encoder(nn.Module):
                 Y_time_hidden,sequence_logits  = self.rnn(X,valid_len,position_encode,\
                                                          decode = decode,query_state = initial_state)
             final_state = None
-        
+
 #         Y_time_hidden=self.self_att(Y_time[:,-1].unsqueeze(dim=1),Y_time,Y_time).squeeze(dim=1)
 #         Y_time_hidden=Y_time[:,-1]
         if self.use_fre:
@@ -2242,21 +2244,21 @@ class ConvGRU(nn.Module):
         LayerNorm=nn.LayerNorm
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
-            self.dense_dropout = nn.Dropout(self.dropout) 
+            self.dense_dropout = nn.Dropout(self.dropout)
         self.use_fre = use_fre
-        
+
         self.encoder = ConvGRU_Encoder(input_size,input_size_fre,hidden_size,dropout_rate,bidirectional,\
                 use_phase,use_rnn ,num_hidden_layers,num_attention_heads,use_fre,
                 use_cnn ,use_embedding ,embedding_weight ,num_embeddings ,num_cnn_layers ,\
                 use_time_position ,pre_cnn_time_position ,use_idx_embedding,idx_embedding_weight ,\
                 use_geo_position,sinusoidal=sinusoidal,**kwargs)
-        
+
         self.hidden_size_time = hidden_size*(2 if use_rnn and bidirectional else 1)
         self.hidden_size_fre = hidden_size*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         output_size_time = self.hidden_size_time*(2 if use_rnn and bidirectional else 1)
         output_size_fre = self.hidden_size_fre*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         if self.use_fre:
             self.dense = nn.Sequential(nn.Linear(output_size_time+output_size_fre,hidden_size),
                                          self.dense_dropout,nn.ReLU(),nn.Linear(hidden_size,2))
@@ -2300,12 +2302,12 @@ class ConvGRU(nn.Module):
                     x = e(x)
             x = x.permute(0,2,1)
             assert x.shape == X_embed.shape
-            
+
         elif self.use_embed:
             x = X_embed
         else:
             x = sequence_logits
-        
+
         logits = self.dense(inputs)
         loss = torch.zeros([]).to(X.device)
         if self.pretrain:
@@ -2335,7 +2337,7 @@ class FusionModel(nn.Module):
                  use_mutual_attention = False,use_residual = False,use_rnn_output = False,\
                  pretrain = False,use_embed = False,handle_mis = False,model_type = "ConvGRU",tri_loss = True):
         super(FusionModel,self).__init__()
-        
+
         self.tri_loss = tri_loss
         self.handle_mis = handle_mis
         self.ptretrain = pretrain
@@ -2351,8 +2353,8 @@ class FusionModel(nn.Module):
             self.mouse_encoder = CNNModel(**mouse_config)
         elif self.model_type == 'BiGRU':
             self.location_encoder = BiGRUModel(**location_config)
-            self.mouse_encoder = BiGRUModel(**mouse_config)            
-        
+            self.mouse_encoder = BiGRUModel(**mouse_config)
+
         self.use_mutual_attention = use_mutual_attention
         if self.use_mutual_attention:
             embed_dim = location_config['hidden_size']*(2 if location_config['use_rnn'] and location_config['bidirectional'] else 1)
@@ -2393,7 +2395,7 @@ class FusionModel(nn.Module):
                     new_valid_len_loc[new_valid_len_loc==0] +=1
 
                 if self.mouse_encoder.encoder.use_cnn:
-                    new_valid_len_mo = (new_valid_len_loc)//pow(2,self.mouse_encoder.encoder.num_cnn_layers)
+                    new_valid_len_mo = (new_valid_len_mo)//pow(2,self.mouse_encoder.encoder.num_cnn_layers)
                     new_valid_len_mo[new_valid_len_mo==0] +=1
 
                 if self.use_mutual_attention:
@@ -2429,17 +2431,17 @@ class LatentGaussianMixture(nn.Module):
         self.cluster_num = cluster_num
         self.rnn_dim = rnn_dim
         if pretrain_dir:
-            mu_c_path = '{}/{}_{}_{}_{}/init_mu_c.npz'.format(pretrain_dir, model, 
+            mu_c_path = '{}/{}_{}_{}_{}/init_mu_c.npz'.format(pretrain_dir, model,
                     token_dim, rnn_dim, cluster_num)
             mu_c = np.load(mu_c_path)
-            self.mu_c = nn.Parameter(torch.tensor(mu_c,dtype = torch.float)) 
+            self.mu_c = nn.Parameter(torch.tensor(mu_c,dtype = torch.float))
 #             tf.get_variable("mu_c", initializer=tf.constant(mu_c))
         else:
-            self.mu_c = nn.Parameter(torch.rand(cluster_num,rnn_dim,dtype = torch.float)) 
+            self.mu_c = nn.Parameter(torch.rand(cluster_num,rnn_dim,dtype = torch.float))
 #             tf.get_variable("mu_c", [args.cluster_num, args.rnn_dim],
 #                     initializer=tf.random_uniform_initializer(0.0, 1.0))
 
-        self.log_sigma_sq_c = nn.Parameter(torch.zeros(cluster_num,rnn_dim,dtype = torch.float),requires_grad = False) 
+        self.log_sigma_sq_c = nn.Parameter(torch.zeros(cluster_num,rnn_dim,dtype = torch.float),requires_grad = False)
 #     tf.get_variable("sigma_sq_c", [args.cluster_num, args.rnn_dim],
 #                 initializer=tf.constant_initializer(0.0), trainable=False)
 
@@ -2459,7 +2461,7 @@ class LatentGaussianMixture(nn.Module):
 
         eps_z = torch.normal(mean = 0.0,std = torch.ones(log_sigma_sq_z.shape)).to(embeded_state.device)
 #         tf.random_normal(shape=tf.shape(log_sigma_sq_z), mean=0.0, stddev=1.0, dtype=tf.float32)
-        z = mu_z + torch.sqrt(torch.exp(log_sigma_sq_z)) * eps_z 
+        z = mu_z + torch.sqrt(torch.exp(log_sigma_sq_z)) * eps_z
 #     mu_z + tf.sqrt(tf.exp(log_sigma_sq_z)) * eps_z
 
         stack_z = z.unsqueeze(1).repeat(1,self.cluster_num,1)
@@ -2493,7 +2495,7 @@ class LatentGaussianMixture(nn.Module):
 
             batch_uniform_loss = torch.mean(torch.sum(pi_post*(torch.log(pi_post)+np.log(self.cluster_num)),dim=-1)) #我认为的形式
             #torch.mean(torch.mean(pi_post,dim=0)*(torch.log(torch.mean(pi_post,dim=0))+np.log(self.cluster_num)))
-            # 
+            #
 #     tf.reduce_mean(tf.reduce_mean(pi_post, axis=0) * tf.log(tf.reduce_mean(pi_post, axis=0)))  #这一步存疑
             return z, [batch_gaussian_loss, batch_uniform_loss]
 class ConvGRU_VAE(nn.Module):
@@ -2511,9 +2513,9 @@ class ConvGRU_VAE(nn.Module):
         LayerNorm=nn.LayerNorm
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
-            self.dense_dropout = nn.Dropout(self.dropout) 
+            self.dense_dropout = nn.Dropout(self.dropout)
         self.use_fre = use_fre
-        
+
         self.encoder = ConvGRU_Encoder(input_size,input_size_fre,hidden_size,dropout_rate,bidirectional,\
                 use_phase,use_rnn ,num_hidden_layers,num_attention_heads,use_fre,
                 use_cnn ,use_embedding ,embedding_weight ,num_embeddings ,num_cnn_layers ,\
@@ -2525,19 +2527,19 @@ class ConvGRU_VAE(nn.Module):
                 False ,use_embedding ,embedding_weight ,num_embeddings ,num_cnn_layers ,\
                 use_time_position ,pre_cnn_time_position ,use_idx_embedding,idx_embedding_weight ,\
                 use_geo_position,pool = False,**kwargs)
-        
+
         self.hidden_size_time = hidden_size*(2 if use_rnn and bidirectional else 1)
         self.hidden_size_fre = hidden_size*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         output_size_time = self.hidden_size_time*(2 if use_rnn and bidirectional else 1)
         output_size_fre = self.hidden_size_fre*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         self.use_cnn = use_cnn
         self.cluster_num = cluster_num
         self.rnn_dim = hidden_size
         self.latent_space = LatentGaussianMixture(hidden_size,hidden_size,cluster_num)
 
-        
+
         self.dense = nn.Sequential(nn.Linear(output_size_time,hidden_size),
                                      self.dense_dropout,nn.ReLU(),nn.Linear(hidden_size,2))
 
@@ -2560,12 +2562,12 @@ class ConvGRU_VAE(nn.Module):
         new_valid_len = valid_len + 1
         new_time_dis = torch.cat([batch_zeros,time_dis],dim=1)
         new_time_position_ids = torch.cat([batch_zeros, time_position_ids], dim=1)
-        new_geo_position_ids = torch.cat([batch_zeros.unsqueeze(-1).repeat(1,1,2), geo_position_ids], dim=1)        
+        new_geo_position_ids = torch.cat([batch_zeros.unsqueeze(-1).repeat(1,1,2), geo_position_ids], dim=1)
         if self.mode =='test':
             X_embed = self.encoder.get_embedding(X,idx_list,geo_position_ids)
             new_X_embed = torch.cat([torch.zeros(X.shape[0],1,X_embed.shape[-1]).float().to(X.device),X_embed],dim=1)
 
-        
+
         if self.mode !="test":
             inputs,sequence_logits,final_state,X_embed,indices_list = self.encoder(X,X_fre,valid_len,time_dis,\
                                      labels,time_position_ids,idx_list,geo_position_ids)
@@ -2576,7 +2578,7 @@ class ConvGRU_VAE(nn.Module):
             z, latent_losses = self.latent_space(encoder_final_state, return_loss=True)
             outputs,output_sequence_logits,output_final_state,X_embed,indices_list = self.decoder(tokens,X_fre,new_valid_len,new_time_dis,labels,new_time_position_ids,idx_list,new_geo_position_ids,\
                                    initial_state=z,input_embed = new_X_embed)
-            
+
             if self.mode == 'train' or self.mode == 'pretrain':
                 res = self.loss(output_sequence_logits, targets, masks, latent_losses)
                 res += [z]
@@ -2644,7 +2646,7 @@ class ConvGRU_VAE(nn.Module):
             # loss = 1.0 * rec_loss + 1.0 / self.rnn_dim * gaussian_loss + 0.1 * uniform_loss
 
         pretrain_loss = rec_loss
-        
+
         score = torch.stack([score,1-score],dim=-1)
 #         tmp_score = self.anomaly_score( outputs, targets, masks)
         return [score,loss]
@@ -2665,21 +2667,21 @@ class ConvGRU_AutoEncoder(nn.Module):
         LayerNorm=nn.LayerNorm
         if self.dropout:
             self._rnn_dropout = RNNDropout(p=self.dropout)
-            self.dense_dropout = nn.Dropout(self.dropout) 
+            self.dense_dropout = nn.Dropout(self.dropout)
         self.use_fre = use_fre
-        
+
         self.encoder = ConvGRU_Encoder(input_size,input_size_fre,hidden_size,dropout_rate,bidirectional,\
                 use_phase,use_rnn ,num_hidden_layers,num_attention_heads,use_fre,
                 use_cnn ,use_embedding ,embedding_weight ,num_embeddings ,num_cnn_layers ,\
                 use_time_position ,pre_cnn_time_position ,use_idx_embedding,idx_embedding_weight ,\
                 use_geo_position,pool = False,**kwargs)
-        
+
         self.hidden_size_time = hidden_size*(2 if use_rnn and bidirectional else 1)
         self.hidden_size_fre = hidden_size*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         output_size_time = self.hidden_size_time*(2 if use_rnn and bidirectional else 1)
         output_size_fre = self.hidden_size_fre*(2 if 'rnn_fre' in self.__dict__['_modules'] and bidirectional else 1)
-        
+
         self.use_cnn = use_cnn
         self.num_cnn_layers = 3
         if self.use_cnn:
@@ -2698,8 +2700,8 @@ class ConvGRU_AutoEncoder(nn.Module):
                             nn.BatchNorm1d(input_size),))
 
 
-            
-            
+
+
         self.dense = nn.Sequential(nn.Linear(output_size_time,hidden_size),
                                      self.dense_dropout,nn.ReLU(),nn.Linear(hidden_size,2))
 

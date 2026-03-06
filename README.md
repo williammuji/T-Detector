@@ -1,93 +1,76 @@
-# T-Detector
-Source Code of 《T-detector: A Trajectory based Pretained Model for Game Bot Detection in MMORPGs》
+# T-Detector (Refined for macOS)
 
-## Install dependencies
-Base environment：python3.6
+This is a refined version of the original 《T-detector: A Trajectory based Pretrained Model for Game Bot Detection in MMORPGs》, adapted for modern macOS (ARM64) development environments and enhanced with interactive 2D behavioral visualization.
 
-Packages：
-    
-    matplotlib==3.1.1
-    numpy==1.18.1
-    pandas==0.25.2
-    Cython==0.29.23
-    gensim==3.8.2
-    torch==1.1.0
-    scipy==1.5.1
-    tqdm==4.37.0
-    dgl==0.4.1
-    scikit_learn==0.24.2
-    transformers==2.5.1
+Base Repository: [aker218/T-Detector](https://github.com/aker218/T-Detector)
 
-Under the corresponding Python version, run requirements.txt in /trajectory_detector/
+## macOS Compatibility Refinements
 
-    pip install -r requirements.txt
-    
-## Directory description
+The original codebase (designed for Python 3.6/3.7) has been upgraded and patched to support **macOS ARM64 (M1/M2/M3)** and **Python 3.12+**:
+
+1.  **Gensim 4.0+ Integration**:
+    *   Updated `Word2Vec` parameters: `size` → `vector_size`.
+    *   Updated `iter` → `epochs`.
+    *   Fixed vocabulary access for modern Gensim API.
+2.  **Transformer & PyTorch Upgrades**:
+    *   Migrated `AdamW` and `BertLayerNorm` imports to standard `torch.optim` and `torch.nn` for compatibility with `transformers 4.x`.
+3.  **Dependency Cleanup**:
+    *   Removed `DGL` library dependencies to bypass C++ compilation errors on ARM64 macOS.
+    *   Replaced deprecated NumPy aliases (e.g., `np.int`, `np.float`) with standard Python types to prevent runtime crashes.
+4.  **Stability Fixes**:
+    *   Resolved directory creation typos (`makedirs(exists_ok=True)`).
+    *   Patched `trainer.py` to handle zero-loss batches during initial pre-training phases.
+    *   Fixed sequence length calculation logic in `models.py`.
+
+## New Features: Combat Radar 2D Visualization
+
+A high-performance 2D behavioral radar has been added to visualize character trajectories in the latent space:
+
+*   **Technology**: Uses **UMAP** for dimensionality reduction and **Plotly WebGL** for interactive rendering.
+*   **Combat Radar v1.2**:
+    *   **SVG Overlays**: Pulse-modulated markers and "TARGET" annotations guaranteed to render on top of all data points.
+    *   **Overlap Handling**: Automatically aggregates perfectly overlapping behavioral segments (X-N indicators).
+    *   **Partial/Fuzzy Search**: Find players by AccID or UserID with real-time radar locking.
+
+## Environment Setup
+
+Recommended Environment: **Python 3.12+**
+
+```bash
+# Core Dependencies
+pip install numpy pandas scipy scikit-learn tqdm torch transformers gensim
+
+# Visualization Dependencies
+pip install umap-learn plotly
+```
+
+## Directory Structure
 
 ```shell
 trajectory_detector
-├── data                                     # data dir
-├── models                                   # model dir
-├── requirements.txt                         # install package
-├── dataset.py                               # torch dataset function
-├── models.py                                # torch model class
-├── trainer.py                               # train and evaluate function
-├── preprocess.py                            # raw data preprocess
-├── time_dis_w2v_preprocess.py               # preprocess of LocationTime2Vec
-├── time_dis_w2v.py                          # LocationTime2Vec
-├── w2v.py                                   # Word2Vec
-├── make_dataset.py                          # Convert processed data to dataset
-├── angle_pretrain.py                        # Angle Pretrain
-├── train_and_evaluate.py                    # Model Training and Evaluation
-├── run.sh                                   # Automated execution script
+├── train_data_sampled/             # Behavioral samples (AccID-UserID)
+├── visualize_2d.py                 # Interactive Radar Visualization Tool
+├── extract_features.py             # Feature Extraction for Latent Space
+├── dataset.py                      # Torch Dataset logic
+├── models.py                       # T-Detector Model Architecture
+├── trainer.py                      # Training & Evaluation logic
+└── run.sh                          # Pipeline entry point
 ```
 
-## Dataset preparation
-The dataset dir should be named "new_dataset/" and placed in the /trajectory_detector/data/，the structure of new_dataset/ is as follows:
-```shell
-├── label.csv                                # label file
-├── move                                     # game character trajectory data dir
-│   ├── 2f8ea2aeaf01249c02c66cb652a723a3_16_2021-05-10.json 
-│   └── 357fe4456ef4a536b2112daddb347a0b_14_2021-05-10.json 
-│   └── ......
-├── mouse                                     # mouse trajectory data dir
-│   ├── 2f8ea2aeaf01249c02c66cb652a723a3_16_2021-05-10.json 
-│   └── 357fe4456ef4a536b2112daddb347a0b_14_2021-05-10.json
-│   └── ......
-```
-label.csv is shown in follows, the id consists of the "user id_map id_sample date" and matches the file names in move/ and mouse/:
-| id	     | label | 
-| :--------|:------|
-|c8b7023594c144a3421dafa07c9d4c53_0_2021-05-15| 0|
-|673aa532d8ed3e1e7926d16ac37328ee_3_2021-05-15| 1|
-|... | ... |
+## Quick Start
 
-the sample in move/ and mouse/ is shown in follows:
+1.  **Prepare Sample Data**: Place behavioral JSONs in `./train_data_sampled/`.
+2.  **Run Pipeline**:
+    ```bash
+    bash run.sh
+    ```
+3.  **Launch Visualization**:
+    ```bash
+    python3 trajectory_detector/visualize_2d.py \
+      --features ./train_data_sampled_processed/extracted_sampled_features.npy \
+      --meta ./train_data_sampled_processed/extracted_sampled_meta.json \
+      --output radar_vision.html
+    ```
 
-```
-[
-    {
-        "x": 24182,
-        "y": 5938,
-        "tm": 1599049877072
-    },
-    {
-        "x": 24182,
-        "y": 5938,
-        "tm": 1599049877075
-    },
-    {
-        "x": 24182,
-        "y": 5938,
-        "tm": 1599049877117
-    }
-    ……
-]
-```
-
-- Field Description: tm: millisecond timestamp, x: map x, y: map y
-
-## Data preprocess->Embedding pretrain->Angle pretrain->Model training and evaluation
-After data preparation, directly execute the run.sh and complete all the steps, among which the embedding pre-training step and Angle pretrain are slow and need to wait for 2-4 hours. Upon completion of the execution, all model parameters and test set evaluation results will be stored under /trajectory_detector/models/.
-    
-    source run.sh
+---
+*Maintained by williammuji. Original research by the T-Detector authors.*

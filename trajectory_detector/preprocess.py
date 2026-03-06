@@ -20,16 +20,17 @@ import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -49,7 +50,7 @@ if __name__ == '__main__':
     parser.add_argument("-ML","--mouse_label_dir",type=str,help="鼠标轨迹样本标签文件夹",default = "./data/04_mouse_trajectory_anti_cheat_dataset/")
     parser.add_argument("-L","--location_dir",type=str,help="人物轨迹样本文件夹",default = "./data/02_movement_trajectory_anti_cheat_dataset/movement_trajectory_dataset/")
     parser.add_argument("-LL","--location_label_dir",type=str,help="人物轨迹样本标签文件夹",default = "./data/02_movement_trajectory_anti_cheat_dataset/")
-    parser.add_argument("-P0","--p0",type=float,default = 0.351 ) 
+    parser.add_argument("-P0","--p0",type=float,default = 0.351 )
     parser.add_argument("-P1","--p1",type=float,default = 0.157)
 
     args = parser.parse_args()
@@ -155,9 +156,9 @@ if __name__ == '__main__':
                 user_idx=sample[1][4]
                 label=sample[2]
                 mouse_data=sample[0]
-                time_idx=f"{begin_idx}_{end_idx}" 
+                time_idx=f"{begin_idx}_{end_idx}"
                 if user in user2action and user_idx in user2action[user]:
-                    assert user2action[user][user_idx]["label"]==label 
+                    assert user2action[user][user_idx]["label"]==label
     #                 assert user2action[user][user_idx]["day"]==idx
                     assert user2action[user][user_idx]["map_idx"]==map_idx
                     user2action[user][user_idx]['mouse_data']=mouse_data
@@ -190,7 +191,7 @@ if __name__ == '__main__':
             mask_idxs.append([])
             for i in tqdm(range(len(day))):
                 label = day[i][1]['label']
-                if label==1: 
+                if label==1:
                     if np.random.binomial(1,p1):
                         mask_idxs[-1].append(0)
                     else:

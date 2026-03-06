@@ -8,22 +8,23 @@ import sys
 import logging
 import pickle
 import re
-from tqdm import tqdm_notebook as tqdm
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 def rand_bbox(size, lam):
     L = size[1]
     cut_rat = 1. - lam
-    cut_l = np.int(L * cut_rat)
+    cut_l = int(L * cut_rat)
     # uniform
     cx = np.random.randint(L)
     bbx1 = np.clip(cx - cut_l // 2, 0, L)
@@ -98,7 +99,7 @@ from torch import autograd
 def evaluate_accuracy(train_iter, net, device=None,fusion = False,mouse=False,filter_lack = False):
     if device is None and isinstance(net, torch.nn.Module):
         # 如果没指定device就使用net的device
-        device = list(net.parameters())[0].device 
+        device = list(net.parameters())[0].device
     pred_score_list = []
     if fusion:
         loc_pred_score_list = []
@@ -136,7 +137,7 @@ def evaluate_accuracy(train_iter, net, device=None,fusion = False,mouse=False,fi
                     geo_position_ids_mo  = sample['mouse_xy'].to(device)
                 logits,location_logits,mouse_logits,loss,hidden = net(X_loc,X_fre_loc,X_len_loc,X_dis_loc,\
                 X_mo,X_fre_mo,X_len_mo,X_dis_mo,y_hat,time_position_ids_loc,idx_list_loc,geo_position_ids_loc\
-                ,time_position_ids_mo,idx_list_mo,geo_position_ids_mo)  
+                ,time_position_ids_mo,idx_list_mo,geo_position_ids_mo)
                 length = sample['mouse_length'].detach().cpu().numpy()*sample['location_length'].detach().cpu().numpy()
             else:
                 if not mouse:
@@ -161,7 +162,7 @@ def evaluate_accuracy(train_iter, net, device=None,fusion = False,mouse=False,fi
                     geo_position_ids = None
                     if 'mouse_xy' in sample:
                         geo_position_ids = sample['mouse_xy'].to(device)
-                    logits,loss,hidden,_,seq_embed = net(X,X_fre,X_len,X_dis,y_hat,time_position_ids,idx_list,geo_position_ids)    
+                    logits,loss,hidden,_,seq_embed = net(X,X_fre,X_len,X_dis,y_hat,time_position_ids,idx_list,geo_position_ids)
                     length = sample['mouse_length'].detach().cpu().numpy()
 
         pred_score = torch.softmax(logits,dim=-1)[:,1].detach().cpu().numpy()
@@ -178,8 +179,8 @@ def evaluate_accuracy(train_iter, net, device=None,fusion = False,mouse=False,fi
         pred_score_list.append(pred_score)
         true_label_list.append(true_label)
         if fusion:
-            loc_pred_score_list.append(loc_pred_score)            
-            mouse_pred_score_list.append(mouse_pred_score)  
+            loc_pred_score_list.append(loc_pred_score)
+            mouse_pred_score_list.append(mouse_pred_score)
     pred_score = np.concatenate(pred_score_list,axis=0)
     true_label = np.concatenate(true_label_list,axis=0)
     if fusion:
@@ -210,7 +211,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
     use_n_gpus = False
     if hasattr(net, "module"):
         use_n_gpus = True
-        
+
     # Train
     t_total = len(train_iter) * num_epochs
     logger.info("***** Running training *****")
@@ -228,7 +229,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
     log_loss_steps = 500
 
     avg_loss = 0.
-    
+
     metric_str = ""
     eval_save_path = os.path.join(output_dir, 'eval_metric.txt')
     max_auc = 0
@@ -246,7 +247,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
 #             sample={key:sample[key].to(device) for key in sample}
             if fusion:
                 y_hat = sample['labels'].to(device)
-            
+
                 X_loc,X_len_loc,X_fre_loc,X_dis_loc = sample['location_feature'].to(device),sample['location_length'].to(device),\
                                  sample['location_fre_feature'].to(device),sample['location_dis'].to(device)
                 time_position_ids_loc = (torch.cumsum(X_dis_loc,dim=1)//400).long()
@@ -293,7 +294,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
                 y_hat = sample['labels'].to(device)
 
                 # data transform 只有在不用fre的时候以及是feature的时候用
-                if data_transform == 'Cutmix':   
+                if data_transform == 'Cutmix':
                     lam = np.random.beta(1, 1)
                     rand_index = torch.randperm(X.size()[0])
                     y_a = y_hat
@@ -313,19 +314,18 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
                     loss = mixup_criterion(loss_func, logits, y_a, y_b, lam)
                 else:
                     logits,loss,hidden,res,seq_embed = net(X,X_fre,X_len,X_dis,y_hat,time_position_ids,idx_list,geo_position_ids)
-            
+
             if use_n_gpus:
                 loss = loss.mean()
-            loss.backward()
-
-            torch.nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
-
-            if optimizer is not None:
-                optimizer.step()
-            if scheduler is not None:
-                scheduler.step()
+            if loss.requires_grad:
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(net.parameters(), max_grad_norm)
+                if optimizer is not None:
+                    optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
             net.zero_grad()
-            
+
             global_step +=1
             if global_step % log_loss_steps == 0:
                 avg_loss /= log_loss_steps
@@ -337,13 +337,13 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
 
             if global_step % save_steps == 0:
                 save_model(output_dir, net, global_step)
-            
+
             pred_score=torch.softmax(logits,dim=-1)[:,1].detach().cpu().numpy()
             true_label=sample['labels'].detach().cpu().numpy()
-            
+
             pred_score_list.append(pred_score)
             true_label_list.append(true_label)
-            
+
             train_l_sum += loss.cpu().item()
             batch_count+=1
             n+=logits.shape[0]
@@ -382,7 +382,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
                 clean_mo_val_acc,clean_mo_val_AUC,clean_mo_val_f1,clean_mo_val_recall,clean_mo_val_precision=\
                 val_acc,val_AUC,val_f1,val_recall,val_precision,\
                 loc_val_acc,loc_val_AUC,loc_val_f1,loc_val_recall,loc_val_precision,\
-                mo_val_acc,mo_val_AUC,mo_val_f1,mo_val_recall,mo_val_precision                
+                mo_val_acc,mo_val_AUC,mo_val_f1,mo_val_recall,mo_val_precision
 #                 evaluate_accuracy(val_iter,net,device,fusion,mouse,True)
 
                 tmp_metric_str = "after %d epochs:\n ===\nloss %g\ntrain acc %g\ntrain auc %g\ntrain f1 %g\ntrain recall %g\ntrain precision %g \
@@ -398,7 +398,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
                                        loc_val_acc,loc_val_AUC,loc_val_f1,loc_val_recall,loc_val_precision,\
                                        clean_loc_val_acc,clean_loc_val_AUC,clean_loc_val_f1,clean_loc_val_recall,clean_loc_val_precision,\
                                        mo_val_acc,mo_val_AUC,mo_val_f1,mo_val_recall,mo_val_precision,\
-                                       clean_mo_val_acc,clean_mo_val_AUC,clean_mo_val_f1,clean_mo_val_recall,clean_mo_val_precision,time.time()-start) 
+                                       clean_mo_val_acc,clean_mo_val_AUC,clean_mo_val_f1,clean_mo_val_recall,clean_mo_val_precision,time.time()-start)
             if (num_epoch+1) % verbose_num == 0:
                 print(tmp_metric_str)
                 if val_AUC>max_auc:
@@ -417,7 +417,7 @@ def train(net,train_iter,val_iter,num_epochs,gpu_ids,optimizer= None ,scheduler=
 def get_hidden(train_iter, net, device=None,fusion = False,mouse=False):
     if device is None and isinstance(net, torch.nn.Module):
         # 如果没指定device就使用net的device
-        device = list(net.parameters())[0].device 
+        device = list(net.parameters())[0].device
     pred_hidden_list = []
 #     if fusion:
 #         loc_pred_score_list = []
@@ -453,7 +453,7 @@ def get_hidden(train_iter, net, device=None,fusion = False,mouse=False):
                     geo_position_ids_mo  = sample['mouse_xy'].to(device)
                 logits,location_logits,mouse_logits,loss,hidden = net(X_loc,X_fre_loc,X_len_loc,X_dis_loc,\
                 X_mo,X_fre_mo,X_len_mo,X_dis_mo,y_hat,time_position_ids_loc,idx_list_loc,geo_position_ids_loc\
-                ,time_position_ids_mo,idx_list_mo,geo_position_ids_mo)  
+                ,time_position_ids_mo,idx_list_mo,geo_position_ids_mo)
                 length = sample['mouse_length'].detach().cpu().numpy()*sample['location_length'].detach().cpu().numpy()
             else:
                 if not mouse:
@@ -478,7 +478,7 @@ def get_hidden(train_iter, net, device=None,fusion = False,mouse=False):
                     geo_position_ids = None
                     if 'mouse_xy' in sample:
                         geo_position_ids = sample['mouse_xy'].to(device)
-                    logits,loss,hidden,_,seq_embed = net(X,X_fre,X_len,X_dis,y_hat,time_position_ids,idx_list,geo_position_ids)    
+                    logits,loss,hidden,_,seq_embed = net(X,X_fre,X_len,X_dis,y_hat,time_position_ids,idx_list,geo_position_ids)
                     length = sample['mouse_length'].detach().cpu().numpy()
             pred_hidden_list.append(hidden.detach().cpu().numpy())
 

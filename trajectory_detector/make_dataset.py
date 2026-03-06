@@ -20,16 +20,17 @@ import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -111,6 +112,7 @@ if args.use_merge_split:
 # In[4]:
 
 
+location_tokens = mouse_tokens = []
 if not args.use_time_dis:
     token_trans = []
     idx_embeddings = [0,0]
@@ -126,7 +128,7 @@ if not args.use_time_dis:
     model_dir = data_dir.strip("/").split("/")[-1]+"_w2v/"
     vocab_name = "w2v/vocab%s.pk"%(suffix)
     if not os.path.exists(os.path.join(data_dir,vocab_name)):
-        os.makedirs(os.path.join(data_dir,"w2v"),exists_ok=True)
+        os.makedirs(os.path.join(data_dir,"w2v"),exist_ok=True)
         token_lists = [location_tokens,mouse_tokens]
     else:
         token_lists = [0,0]
@@ -149,7 +151,7 @@ if not args.use_time_dis:
         if not use_cluster:
             wv_embedding=np.zeros((len(vocab2idxs[i])+1,100))
         else:
-            wv_embedding=np.zeros((np.unique(list(token_trans[i].values())).shape[0]+1,100))        
+            wv_embedding=np.zeros((np.unique(list(token_trans[i].values())).shape[0]+1,100))
         for v in vocabs[i]:
             if not use_cluster:
                 wv_embedding[vocab2idxs[i][v]]=wv_model.wv[str(v)]
@@ -203,7 +205,7 @@ def test_fft(data,sampling_rate=100,use_phase=False,denoise=True):
     sampling_rate = sampling_rate   #采样率
     fft_size =data.shape[0]      #FFT长度
     xs = temp
-    
+
     xf = np.fft.rfft(xs) / fft_size  #返回fft_size/2+1 个频率
     freqs = np.linspace(0, int(sampling_rate/2), int(fft_size/2+1))   #表示频率
     xfp = np.abs(xf) *2   #代表信号的幅值，即振幅
@@ -214,7 +216,7 @@ def test_fft(data,sampling_rate=100,use_phase=False,denoise=True):
         avg_freq=np.sum(xfp*freqs)/np.sum(xfp)
         variance=np.sum(((freqs-avg_freq)**2)*xfp)/np.sum(xfp)
     if use_phase:
-        return xfp,angle,avg_freq,variance #返回平均频率  
+        return xfp,angle,avg_freq,variance #返回平均频率
     else:
         return xfp,avg_freq,variance
 def get_frequency_map(a,flag=False,sampling_rate=100,denoise=True,use_phase=False,dim=3):
@@ -323,7 +325,7 @@ def process(sample,x1,x2,y1,y2,threshold=20,width = 100,height = 100):
     sample[:,0][sample[:,0]>=x2]=x2
     sample[:,0][sample[:,0]<x1]=x1
     sample[:,1][sample[:,1]>=y2]=y2
-    sample[:,1][sample[:,1]<y1]=y1 
+    sample[:,1][sample[:,1]<y1]=y1
     dis = abs(sample[1:,]-sample[:-1])
     abs_dis = np.sqrt(dis[:,0]**2+dis[:,1]**2)
     filtered_sample = sample[np.concatenate([[threshold],abs_dis])>=threshold]
@@ -387,7 +389,7 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
                 new_day[i][1]['time_idx'] = tmp1[2]
             else:
                 new_day[i][1]['weekday_idx'] = 100
-                new_day[i][1]['time_idx'] = 100                
+                new_day[i][1]['time_idx'] = 100
             sample=day[i][1]['location_data'] if 'location_data' in day[i][1] else None
             location_feature,location_fre_feature=np.zeros((1,9)),np.zeros((int(1000//40/2)*2,9))
 #             get_feature(sample)
@@ -424,7 +426,7 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
             new_day[i][1]['location_f_dis'] = filtered_time_dis
             new_day[i][1]['location_dis'] = time_dis
 
-            
+
             sample=day[i][1]['mouse_data'] if 'mouse_data' in day[i][1] else None
             if use_mouse:
                 if sample is not None:
@@ -453,13 +455,13 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
                 filtered_time_dis ,token_sequence,raw_token_sequence =                  np.asarray([0]), np.asarray([mouse_token2idx['pad']]), np.asarray([mouse_token2idx['pad']])
                 time_dis = np.asarray([0])
                 new_day[i][1]['mouse_xy'] = np.zeros([1,2]);
-                new_day[i][1]['mouse_f_xy'] = np.zeros([1,2]);     
+                new_day[i][1]['mouse_f_xy'] = np.zeros([1,2]);
                 mouse_feature,mouse_fre_feature=location_feature,location_fre_feature
             new_day[i][1]['mouse_f_token'] = token_sequence
             new_day[i][1]['mouse_token'] = raw_token_sequence
             new_day[i][1]['mouse_f_dis'] = filtered_time_dis
             new_day[i][1]['mouse_dis'] = time_dis
-            
+
             new_day[i][1]['location_feature']=location_feature
             new_day[i][1]['location_fre_feature']=location_fre_feature
             new_day[i][1]['mouse_feature']=mouse_feature
@@ -493,7 +495,7 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
 #             day[i][1]['location_agg_feature'] = agg_feature(day[i][1]['location_feature'])
 #             day[i][1]['mouse_agg_feature'] = agg_feature(day[i][1]['mouse_feature'])
 
-            if mask_idx[i] in [0,1]: 
+            if mask_idx[i] in [0,1]:
                 if mask_idx[i] == 0:
                     masked_mouse_feature,masked_mouse_fre_feature = np.zeros((1,9)),np.zeros((int(1000//40/2)*2,9))
                     masked_mouse_filtered_time_dis ,masked_mouse_token_sequence,masked_mouse_raw_token_sequence =                     np.asarray([0]),np.asarray([mouse_token2idx['pad']]),np.asarray([mouse_token2idx['pad']])
@@ -513,24 +515,24 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
                 day[i][1]['masked_mouse_fre_feature'] = masked_mouse_fre_feature
                 day[i][1]['masked_location_feature'] = masked_location_feature
                 day[i][1]['masked_location_fre_feature'] = masked_location_fre_feature
-                
+
                 day[i][1]['masked_mouse_f_token'] = masked_mouse_token_sequence
                 day[i][1]['masked_mouse_token'] = masked_mouse_raw_token_sequence
                 day[i][1]['masked_mouse_f_dis'] = masked_mouse_filtered_time_dis
                 day[i][1]['masked_mouse_dis'] = masked_mouse_time_dis
                 day[i][1]['masked_mouse_xy'] = masked_mouse_xy
                 day[i][1]['masked_mouse_f_xy'] = masked_mouse_f_xy
-                
+
                 day[i][1]['masked_location_f_token'] = day[i][1]['location_f_token']
                 day[i][1]['masked_location_token'] =  day[i][1]['location_token']
                 day[i][1]['masked_location_f_dis'] = day[i][1]['location_f_dis']
                 day[i][1]['masked_location_dis'] = day[i][1]['location_dis']
                 day[i][1]['masked_location_xy'] = day[i][1]['location_xy']
                 day[i][1]['masked_location_f_xy'] = day[i][1]['location_f_xy']
-                
+
 #                 day[i][1]['masked_mouse_agg_feature'] = masked_mouse_agg_feature
 #                 day[i][1]['masked_location_agg_feature'] = day[i][1]['location_agg_feature']
-            elif mask_idx[i] in [2,3]: 
+            elif mask_idx[i] in [2,3]:
                 if mask_idx[i] == 2:
                     masked_location_feature,masked_location_fre_feature = np.zeros((1,9)),np.zeros((int(1000//40/2)*2,9))
                     masked_location_filtered_time_dis ,masked_location_token_sequence,masked_location_raw_token_sequence =                         np.asarray([0]),np.asarray([location_token2idx['pad']]),np.asarray([location_token2idx['pad']])
@@ -538,7 +540,7 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
                     masked_location_time_dis = np.asarray([0])
                     masked_location_xy = np.zeros([1,2])
                     masked_location_f_xy = np.zeros([1,2])
-                    
+
                 else:
                     masked_location_feature,masked_location_fre_feature = day[i][1]['location_feature'],day[i][1]['location_fre_feature']
                     masked_location_filtered_time_dis ,masked_location_token_sequence,masked_location_raw_token_sequence =                     day[i][1]['location_f_dis'],day[i][1]['location_f_token'],day[i][1]['location_token']
@@ -546,20 +548,20 @@ if not os.path.exists(os.path.join(data_dir,file_name+suffix)):
                     masked_location_time_dis = day[i][1]['location_dis']
                     masked_location_xy = day[i][1]['location_xy']
                     masked_location_f_xy = day[i][1]['location_f_xy']
-                    
+
                 masked_mouse_feature,masked_mouse_fre_feature = day[i][1]['mouse_feature'],day[i][1]['mouse_fre_feature']
                 day[i][1]['masked_mouse_feature'] = masked_mouse_feature
                 day[i][1]['masked_mouse_fre_feature'] = masked_mouse_fre_feature
                 day[i][1]['masked_location_feature'] = masked_location_feature
                 day[i][1]['masked_location_fre_feature'] = masked_location_fre_feature
-                
+
                 day[i][1]['masked_location_f_token'] = masked_location_token_sequence
                 day[i][1]['masked_location_token'] = masked_location_raw_token_sequence
                 day[i][1]['masked_location_f_dis'] = masked_location_filtered_time_dis
                 day[i][1]['masked_location_dis'] = masked_location_time_dis
                 day[i][1]['masked_location_xy'] = masked_location_xy
                 day[i][1]['masked_location_f_xy'] = masked_location_f_xy
-                
+
                 day[i][1]['masked_mouse_f_token'] = day[i][1]['mouse_f_token']
                 day[i][1]['masked_mouse_token'] =  day[i][1]['mouse_token']
                 day[i][1]['masked_mouse_f_dis'] = day[i][1]['mouse_f_dis']

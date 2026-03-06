@@ -1,0 +1,40 @@
+# Data
+train_data/
+train_data_sampled_processed/
+trajectory_detector/models/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Logs
+*.log
+trajectory_detector/*.log
+
+# OS
+.DS_Store
+
+# System generated
+.system_generated/
+.gemini/
+brain/
+**/__pycache__/

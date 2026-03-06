@@ -8,22 +8,23 @@ import sys
 import logging
 import pickle
 import re
-from tqdm import tqdm_notebook as tqdm
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -41,7 +42,7 @@ class sampleDataset(Data.Dataset):
         self.location_fre_feature=[ torch.tensor(e[1]['masked_location_fre_feature']).float() for day in day2action for e in day]
         self.mouse_feature=[ torch.tensor(e[1]['masked_mouse_feature']).float() for day in day2action for e in day]
         self.mouse_fre_feature=[ torch.tensor(e[1]['masked_mouse_fre_feature']).float() for day in day2action for e in day]
-        
+
         self.location_token = [ torch.tensor(e[1]['masked_location_token']).long() for day in day2action for e in day]
         self.location_dis = [ torch.tensor(e[1]['masked_location_dis']).long() for day in day2action for e in day]
         self.location_f_token = [ torch.tensor(e[1]['masked_location_f_token']).long() for day in day2action for e in day]
@@ -61,13 +62,13 @@ class sampleDataset(Data.Dataset):
             self.weekday_idx = torch.tensor([e[1]['weekday_idx']  for day in day2action for e in day]).long()
             self.time_idx = torch.tensor([e[1]['time_idx']  for day in day2action for e in day]).long()
         if 'masked_location_xy' in day2action[idx][0][1]:
-            self.location_xy = [ torch.tensor(e[1]['masked_location_xy']).long() for day in day2action for e in day] 
+            self.location_xy = [ torch.tensor(e[1]['masked_location_xy']).long() for day in day2action for e in day]
         if 'masked_mouse_xy' in day2action[idx][0][1]:
-            self.mouse_xy = [ torch.tensor(e[1]['masked_mouse_xy']).long() for day in day2action for e in day] 
+            self.mouse_xy = [ torch.tensor(e[1]['masked_mouse_xy']).long() for day in day2action for e in day]
         if 'masked_location_f_xy' in day2action[idx][0][1]:
-            self.location_f_xy = [ torch.tensor(e[1]['masked_location_f_xy']).long() for day in day2action for e in day] 
+            self.location_f_xy = [ torch.tensor(e[1]['masked_location_f_xy']).long() for day in day2action for e in day]
         if 'masked_mouse_f_xy' in day2action[idx][0][1]:
-            self.mouse_f_xy = [ torch.tensor(e[1]['masked_mouse_f_xy']).long() for day in day2action for e in day] 
+            self.mouse_f_xy = [ torch.tensor(e[1]['masked_mouse_f_xy']).long() for day in day2action for e in day]
     def __getitem__(self,idx):
 
         val = {"location_feature":self.location_feature[idx],"location_fre_feature":self.location_fre_feature[idx],\
@@ -124,10 +125,10 @@ def collate_fn(train_data,use_token=False,fil=False):
             mouse_dis = nn.utils.rnn.pad_sequence([e['mouse_f_dis'][:2000] for e in train_data],batch_first=True)
             if 'mouse_f_xy' in train_data[0]:
                 mouse_xy =  nn.utils.rnn.pad_sequence([e['mouse_f_xy'][:2000] for e in train_data],batch_first=True)
-            
+
     location_fre_feature = torch.stack([e['location_fre_feature'] for e in train_data]).float()
     mouse_fre_feature = torch.stack([e['mouse_fre_feature'] for e in train_data]).float()
-    
+
     labels = torch.stack([e['labels'] for e in train_data]).long()
     if location_feature.shape[1]%8:
         pad_len = 8-location_feature.shape[1]%8

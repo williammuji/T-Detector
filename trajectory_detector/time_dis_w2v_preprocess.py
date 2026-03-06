@@ -20,16 +20,17 @@ import time
 import scipy.signal
 import math
 
-import dgl
-import dgl.nn as dglnn
+# import dgl removed
+# import dgl.nn as dglnn removed
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
 import torch.nn.functional as F
-import random 
-from transformers import *
-from transformers.modeling_bert import BertConfig,BertLayerNorm
-from transformers.activations import gelu, gelu_new, swish
+import random
+from transformers import BertConfig
+from transformers.activations import gelu, gelu_new
+BertLayerNorm = nn.LayerNorm
+def swish(x): return x * torch.sigmoid(x)
 
 import sklearn.metrics as metrics
 from sklearn.metrics import confusion_matrix,precision_recall_fscore_support,accuracy_score
@@ -95,7 +96,7 @@ def process(sample,x1,x2,y1,y2,threshold=20,width = 100,height = 100):
     sample[:,0][sample[:,0]>=x2]=x2
     sample[:,0][sample[:,0]<x1]=x1
     sample[:,1][sample[:,1]>=y2]=y2
-    sample[:,1][sample[:,1]<y1]=y1 
+    sample[:,1][sample[:,1]<y1]=y1
     dis = abs(sample[1:,]-sample[:-1])
     abs_dis = np.sqrt(dis[:,0]**2+dis[:,1]**2)
     filtered_sample = sample[np.concatenate([[threshold],abs_dis])>=threshold]
@@ -145,7 +146,7 @@ for day in day2action:
         if 'location_raw_token' in sample[1]:
             location_tokens.append(sample[1]['location_raw_token'])
             location_time_dis.append(np.cumsum(sample[1]['location_data'][:,-1]/dis_grid))
-            
+
 filtered_location_datas = []
 location_tokens = []
 location_xys = []
@@ -173,7 +174,7 @@ for day in day2action:
         if 'mouse_data' in sample[1]:
             mouse_datas.append(sample[1]['mouse_data'].copy())
             mouse_idxs.append(get_idx(sample,itype = 'mouse'))
-            
+
 for sample in tqdm(mouse_datas):
     filtered_sample,token_sequence,raw_token_sequence = process(sample,*word2vec_config['mouse'])
     mouse_tokens.append(token_sequence)
@@ -460,7 +461,7 @@ else:
     all_contexts = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"location_context.pickle"+suffix),"rb"))
     all_dis = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"location_dis.pickle"+suffix),"rb"))
     all_negatives = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"location_negative.pickle"+suffix),"rb"))
-    
+
 
 
 # In[19]:
@@ -504,5 +505,5 @@ else:
     all_contexts = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"mouse_context.pickle"+suffix),"rb"))
     all_dis = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"mouse_dis.pickle"+suffix),"rb"))
     all_negatives = pickle.load(open(os.path.join(data_dir,"time-dis-vec/"+flag+"mouse_negative.pickle"+suffix),"rb"))
-    
+
 
