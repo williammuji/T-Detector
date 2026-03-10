@@ -84,19 +84,33 @@ if __name__ == '__main__':
             tmp = pd.read_csv(os.path.join(label_dir,"label.csv"))
             for e in tmp.values:
                 label_map[e[0]] = e[1]
-        data_files=os.listdir(data_dir)
+        data_files=[f for f in os.listdir(data_dir) if f.endswith(".json")]
         samples=[[] for i in range(31)]
         for file in tqdm(data_files):
-            sample=np.asarray([[e['x'],e['y'],e['tm']] for e in json.load(open(os.path.join(data_dir,file),'r'))])
+            sample_file_path = os.path.join(data_dir, file)
+            with open(sample_file_path, 'r') as f:
+                raw_data = json.load(f)
+            if not raw_data:
+                continue
+            sample=np.asarray([[e['x'],e['y'],e['tm']] for e in raw_data])
             begin=sample[:,2][0]
             end=sample[:,2][-1]
-            user_idx,map_idx,_=file.split("_")
-            map_idx=int(map_idx)
+            try:
+                # File format should be user_id-acc_id_map_id_timestamp.json or similar
+                # The split logic might be sensitive to filename format
+                parts = file.strip(".json").split("_")
+                if len(parts) >= 2:
+                    user_idx, map_idx = parts[0], int(parts[1])
+                else:
+                    user_idx, map_idx = file.strip(".json"), 0
+            except:
+                user_idx, map_idx = file.strip(".json"), 0
+            
             time_dis=np.concatenate([[0],sample[1:,2]-sample[:-1,2]])
-            abnormal_point=np.arange(sample.shape[0]-1)[(np.abs((sample[1:,2]-sample[:-1,2])-400)>=10)]+1
+            # abnormal_point=np.arange(sample.shape[0]-1)[(np.abs((sample[1:,2]-sample[:-1,2])-400)>=10)]+1
             pre_sample=sample.copy()
             sample[:,2]=time_dis
-            label=label_map[file.strip(".json")]
+            label=label_map.get(file.strip(".json"), 0)
             full_sample=[sample,[user_idx,map_idx,begin,end,file.strip(".json")],label]
             day_idx=(time.localtime(begin//1000).tm_mday%31)
             samples[day_idx].append(full_sample)

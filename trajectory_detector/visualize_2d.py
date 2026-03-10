@@ -58,8 +58,22 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
         cluster_labels = np.zeros(embedding.shape[0], dtype=int)
 
     # Extract metadata properties for visualization
-    user_ids = [str(m.get('user_id', 'Unknown')) for m in meta]
-    # labels = [str(m.get('label', '0')) for m in meta] # No longer needed as we use cluster_labels
+    # User ID format is often like "accid-userid_mapid_time" or similar based on preprocess.py
+    user_ids = []
+    map_ids = []
+    
+    for m in meta:
+        uid = str(m.get('user_id', 'Unknown'))
+        user_ids.append(uid)
+        
+        # Try to extract map_id from user_id if it's there
+        # parts = file.strip(".json").split("_") -> user_idx, map_idx, begin, end, session_id
+        # Actually in meta it's just the 'user_id' which is likely the session id
+        parts = uid.split("_")
+        if len(parts) >= 2:
+            map_ids.append(parts[1])
+        else:
+            map_ids.append("0")
 
     # Some logic to handle large datasets effectively in Plotly
     # For WebGL rendering performance, plotly express scatter is best
@@ -144,6 +158,7 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
             'x': round(float(embedding[i, 0]), 4),
             'y': round(float(embedding[i, 1]), 4),
             'id': user_ids[i],
+            'map': map_ids[i],
             'cluster': int(cluster_labels[i])
         })
     data_json = json.dumps(data_list)
@@ -173,15 +188,36 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
     
     # Inject search bar and high-visibility highlighting logic
     search_html = f"""
-    <div id="search-container" style="position: absolute; top: 50px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.95); padding: 15px; border-radius: 10px; color: white; font-family: sans-serif; box-shadow: 0 0 25px rgba(0,0,0,1); border: 2px solid #00ffff; width: 280px;">
-        <div style="margin-bottom: 12px; font-weight: bold; font-size: 16px; color: #00ffff; letter-spacing: 1px;">LATENT PATTERN MAP v2.0</div>
-        <div style="font-size: 11px; color: #888; margin-bottom: 8px;">* Sampled View (Max 100k samples for WebGL)</div>
-        <input type="text" id="user-search" placeholder="Search AccID or UserID..." style="padding: 12px; width: 100%; border: 1px solid #00ffff; border-radius: 4px; background: #000; color: #fff; outline: none; box-sizing: border-box; font-family: monospace; font-size: 14px;">
-        <div style="margin-top: 12px; display: flex; gap: 8px;">
-            <button onclick="searchUser()" style="flex: 1; padding: 10px; cursor: pointer; background: #00ffff; color: #000; border: none; border-radius: 4px; font-weight: bold; text-transform: uppercase;">Scan</button>
-            <button onclick="clearSearch()" style="padding: 10px; cursor: pointer; background: #444; color: white; border: none; border-radius: 4px;">Reset</button>
+    <div id="search-container" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(10, 10, 30, 0.95); padding: 15px; border-radius: 12px; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; box-shadow: 0 8px 32px rgba(0,0,0,0.8); border: 1px solid rgba(0, 255, 255, 0.3); width: 320px; backdrop-filter: blur(10px);">
+        <div style="margin-bottom: 12px; font-weight: bold; font-size: 18px; color: #00ffff; letter-spacing: 2px; text-align: center; text-shadow: 0 0 10px #00ffff;">T-DETECTOR RADAR</div>
+        <div style="font-size: 11px; color: #aaa; margin-bottom: 10px; text-align: center;">Combat Pattern Analysis System</div>
+        
+        <div style="margin-bottom: 10px;">
+           <label style="font-size: 11px; color: #00ffff; display: block; margin-bottom: 4px;">TARGET ID (AccID/UserID)</label>
+           <input type="text" id="user-search" placeholder="Enter ID..." style="padding: 10px; width: 100%; border: 1px solid rgba(0, 255, 255, 0.5); border-radius: 6px; background: rgba(0, 20, 40, 0.8); color: #fff; outline: none; box-sizing: border-box; font-family: monospace; font-size: 13px;">
         </div>
-        <div id="search-result" style="margin-top: 12px; font-size: 13px; color: #00ffff; font-family: monospace; white-space: pre-wrap;">RADAR STANDBY...</div>
+        
+        <div style="margin-bottom: 15px;">
+           <label style="font-size: 11px; color: #00ffff; display: block; margin-bottom: 4px;">MAP ID</label>
+           <input type="text" id="map-search" placeholder="Enter MapID..." style="padding: 10px; width: 100%; border: 1px solid rgba(0, 255, 255, 0.5); border-radius: 6px; background: rgba(0, 20, 40, 0.8); color: #fff; outline: none; box-sizing: border-box; font-family: monospace; font-size: 13px;">
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+            <button onclick="searchUser()" style="flex: 2; padding: 12px; cursor: pointer; background: linear-gradient(135deg, #00ffff, #0088ff); color: #000; border: none; border-radius: 6px; font-weight: bold; text-transform: uppercase; transition: 0.3s; box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);">Scan Area</button>
+            <button onclick="clearSearch()" style="flex: 1; padding: 12px; cursor: pointer; background: rgba(60, 60, 80, 0.8); color: white; border: none; border-radius: 6px; transition: 0.3s;">Reset</button>
+        </div>
+        
+        <div id="search-result" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 6px; font-size: 12px; color: #00ffff; font-family: monospace; min-height: 40px; border-left: 3px solid #00ffff;">SYSTEM READY.</div>
+
+        <div id="analysis-tools" style="margin-top: 15px; display: none; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; color: #ff00ff, margin-bottom: 8px;">INTELLIGENCE TOOLS:</div>
+            <div id="copy-plot" style="margin-bottom: 8px; font-size: 10px; background: rgba(255,0,255,0.1); padding: 5px; border: 1px dashed #ff00ff; cursor: pointer; border-radius: 4px;" title="Click to copy plot command">
+               PLOT TRAJECTORY
+            </div>
+            <div id="copy-explain" style="font-size: 10px; background: rgba(255,255,0,0.1); padding: 5px; border: 1px dashed #ffff00; cursor: pointer; border-radius: 4px;" title="Click to copy explain command">
+               EXPLAIN BEHAVIOR
+            </div>
+        </div>
     </div>
     <script>
     const RAW_DATA = {data_json};
@@ -192,22 +228,42 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
         var gd = document.getElementsByClassName('plotly-graph-div')[0];
         if (blinkInterval) {{ clearInterval(blinkInterval); blinkInterval = null; }}
         Plotly.relayout(gd, {{ shapes: [], annotations: [] }});
-        document.getElementById('search-result').innerText = "RADAR RESET.";
+        document.getElementById('search-result').innerText = "SYSTEM RESET.";
         document.getElementById('user-search').value = "";
+        document.getElementById('map-search').value = "";
+        document.getElementById('analysis-tools').style.display = 'none';
+    }}
+
+    function copyToClipboard(text) {{
+        const el = document.createElement('textarea');
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        alert("Command copied to clipboard!");
     }}
 
     function searchUser() {{
-        var searchTerm = document.getElementById('user-search').value.trim().toLowerCase();
-        if (!searchTerm) return;
+        var idTerm = document.getElementById('user-search').value.trim().toLowerCase();
+        var mapTerm = document.getElementById('map-search').value.trim().toLowerCase();
+        
+        if (!idTerm && !mapTerm) return;
         
         var gd = document.getElementsByClassName('plotly-graph-div')[0];
         if (blinkInterval) {{ clearInterval(blinkInterval); blinkInterval = null; }}
 
-        var results = RAW_DATA.filter(d => d.id.toLowerCase().includes(searchTerm));
+        var results = RAW_DATA.filter(d => {{
+            var idMatch = !idTerm || d.id.toLowerCase().includes(idTerm);
+            var mapMatch = !mapTerm || d.map.toLowerCase().includes(mapTerm);
+            return idMatch && mapMatch;
+        }});
         
         var resultDiv = document.getElementById('search-result');
+        var toolsDiv = document.getElementById('analysis-tools');
+
         if (results.length > 0) {{
-            // De-duplicate positions to handle overlapping points (clustered segments)
+            // De-duplicate positions
             var posMap = {{}};
             results.forEach(r => {{
                 var key = r.x + "," + r.y;
@@ -231,9 +287,7 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
                     fillcolor: 'rgba(255, 0, 255, 0.2)'
                 }});
 
-                // Label shows ID and count if multiple segments overlap
                 var label = (count > 1) ? `<b>TARGET ×${{count}}</b>` : `<b>TARGET</b>`;
-                var detail = group.map(g => g.id.split('_').slice(-1)[0]).join('\\n');
                 
                 annotations.push({{
                     x: r.x, y: r.y,
@@ -275,21 +329,34 @@ def visualize_features(features_path, meta_path, output_html="radar_vision.html"
                 Plotly.relayout(gd, {{ shapes: nextShapes }});
             }}, 400);
             
-            resultDiv.innerHTML = "STATUS: LOCKED\\nMATCHES: " + results.length + "\\nCLUSTERS: " + Object.keys(posMap).length + "\\n(Check tooltips for full IDs)";
+            resultDiv.innerHTML = "STATUS: LOCKED<br>MATCHES: " + results.length + "<br>CLUSTERS: " + Object.keys(posMap).length;
             resultDiv.style.color = "#00ffff";
+            
+            // Show analysis tools for the first match
+            if (results.length > 0) {{
+                const firstId = results[0].id;
+                toolsDiv.style.display = 'block';
+                document.getElementById('copy-plot').onclick = () => copyToClipboard(`python plot_trajectory_script.py --ids ${{firstId}}`);
+                document.getElementById('copy-explain').onclick = () => copyToClipboard(`python explain_behavior.py --user_id ${{firstId}}`);
+            }}
+
         }} else {{
-            resultDiv.innerHTML = "STATUS: NOT FOUND\\nTERM: " + searchTerm;
+            resultDiv.innerHTML = "STATUS: NOT FOUND<br>TERM: " + idTerm + " " + mapTerm;
             resultDiv.style.color = "#ff4444";
+            toolsDiv.style.display = 'none';
             Plotly.relayout(gd, {{ shapes: [], annotations: [] }});
         }}
     }}
     
-    document.getElementById('user-search').addEventListener("keyup", function(event) {{
-        if (event.keyCode === 13) {{
-            event.preventDefault();
-            searchUser();
-        }}
+    [document.getElementById('user-search'), document.getElementById('map-search')].forEach(el => {{
+        el.addEventListener("keyup", function(event) {{
+            if (event.keyCode === 13) {{
+                event.preventDefault();
+                searchUser();
+            }}
+        }});
     }});
+    </script>
     </script>
     """
     
