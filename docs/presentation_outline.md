@@ -10,17 +10,15 @@
 
 - 项目背景
 - 数据采集
+- 预处理流水线
 - merge-and-split 动态网格算法
 - LocationTime2Vec 时空感知嵌入
 - ConvGRU 混合编码器
 - Mutual Attention 双流融合机制
 - FusionModel 整体架构与前向流程
 - Triplet Loss 在嵌入优化中的作用
-- 预训练(下游微调完整训练路径)
 - 数据增强策略（Mixup & Cutmix）
-- 端到端执行脚本 run.sh
-- 实时部署方案与工程实践
-- 自动化测试体系
+- 端到端执行
 - 论文核心创新点总结
 
 ---
@@ -228,34 +226,20 @@ flowchart LR
 
 执行顺序严格依赖，前一步输出作为后一步输入。
 
----
-
-## 第 13 页 - 实时部署架构
-
-推荐技术栈：模型导出：TorchScript / ONNX + TensorRT 量化
-
-- 服务端：FastAPI + Redis 缓存嵌入向量
-- 数据流：Kafka + 触发式采集
-- 推理延迟目标：< 500ms（GPU） / < 1s（CPU）
-- 部署形态：云端推理服务 + 游戏客户端轻量插件
-- 支持在线增量微调（联邦学习可选）
 
 ---
 
-## 第 14 页 - 自动化测试体系
-
-核心测试文件：
-- test_entropy_module.py：验证人类高熵 vs 宏低熵 + FFT 尖峰检测
-- test_aim_correlation.py：验证跟随机器人相关系数 > 0.98 且动作抖动 < 5ms
-
-采用 unittest 框架，集成到 CI/CD 流水线，确保每次重构后核心指标不退化。
-
----
-
-## 第 15 页 - 论文核心创新点
+## 第 13 页 - 论文核心创新点
 
 - 首个针对 MMORPG 的轨迹预训练框架
 - LocationTime2Vec：显式时空距离感知嵌入
 - ConvGRU + Mutual Attention 双流融合模型
 - Angle-based 自监督预训练 + Triplet Loss 嵌入优化
+
+---
+
+## 第 14 页 - clusters
+
+- [https://williammuji.github.io/T-Detector/train_data_sampled_radar_vision.html](https://williammuji.github.io/T-Detector/train_data_sampled_radar_vision.html)
+![radar_vision](./radar_vision.png)
 
